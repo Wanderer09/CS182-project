@@ -1,0 +1,23 @@
+inherit: 
+    - base.yaml
+
+training:
+    task: sine 
+    data: gaussian
+    task_kwargs: 
+        A_range: [0.1, 5.0]
+        B_range: [0.1, 5.0]
+        C_range: [0, 3.14159]
+        D_range: [-1.0, 1.0]
+    curriculum:
+        points:
+            start: 11
+            end: 41
+            inc: 2
+            interval: 2000
+
+out_dir: ../models/sine_task
+
+wandb:
+    name: "sine_task"
+    entity: hzg040122-uc-berkeley-electrical-engineering-computer-sc

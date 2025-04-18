@@ -1,0 +1,26 @@
+inherit:
+  - base.yaml
+
+training:
+  task: sine2periodic
+  task_kwargs: {"scale": 1.0}
+  curriculum:
+    points:
+      start: 1
+      end: 32
+      inc: 1
+      interval: 1000
+    dims:
+      start: 1
+      end: 10
+      inc: 1
+      interval: 1000
+
+out_dir: ../models/sine2periodic
+
+wandb:
+  project: sine-test
+  entity: hzg040122-uc-berkeley-electrical-engineering-computer-sc
+  name: "sine2periodic-run"
+  notes: "Training sine model and testing on periodic function"
+  log_every_steps: 10

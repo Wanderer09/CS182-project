@@ -1,0 +1,26 @@
+inherit:
+  - base.yaml
+
+training:
+  task: sine2cosine
+  task_kwargs: {"scale": 1.0}
+  curriculum:
+    points:
+      start: 1
+      end: 32
+      inc: 1
+      interval: 10
+    dims:
+      start: 1
+      end: 10
+      inc: 1
+      interval: 10
+
+out_dir: ../models/sine2cosine
+
+wandb:
+  project: sine-test
+  entity: hzg040122-uc-berkeley-electrical-engineering-computer-sc
+  name: "sine2cosine-run"
+  notes: "Training sine model and testing on cosine function"
+  log_every_steps: 10
