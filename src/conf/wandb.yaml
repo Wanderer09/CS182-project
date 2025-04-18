@@ -1,5 +1,5 @@
 wandb:
-    project: in-context-training
-    entity: your-entity
+    project: "incontextlearning"
+    entity: "wangzhiyuan223-uc-berkeley-electrical-engineering-comput"
     notes:
     log_every_steps: 100

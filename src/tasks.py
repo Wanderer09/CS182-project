@@ -60,6 +60,7 @@ def get_task_sampler(
         "quadratic_regression": QuadraticRegression,
         "relu_2nn_regression": Relu2nnRegression,
         "decision_tree": DecisionTree,
+        "sine": Sine,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]
@@ -339,6 +340,91 @@ class DecisionTree(Task):
     def get_metric():
         return squared_error
 
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+    
+class Sine(Task):
+    """
+    正弦函数任务。
+    每个任务生成一个正弦函数 y = A * sin(B * x + C) + D。
+    """
+    def __init__(
+        self,
+        n_dims,
+        batch_size,
+        pool_dict=None,
+        seeds=None,
+        A_range=(0.1, 5.0),
+        B_range=(0.1, 5.0),
+         C_range=(0, math.pi),
+        D_range=(-1.0, 1.0),
+     ):
+        """
+        初始化正弦函数任务。
+        - 振幅范围 (A)
+        - 频率范围 (B)
+        - 相位范围 (C)
+        - 偏移范围 (D)
+        """
+        super(Sine, self).__init__(n_dims, batch_size, pool_dict, seeds)
+        self.A_range = A_range
+        self.B_range = B_range
+        self.C_range = C_range
+        self.D_range = D_range
+
+        if pool_dict is None and seeds is None:
+            # 随机生成参数
+            self.A_b = torch.empty(batch_size).uniform_(*A_range)
+            self.B_b = torch.empty(batch_size).uniform_(*B_range)
+            self.C_b = torch.empty(batch_size).uniform_(*C_range)
+            self.D_b = torch.empty(batch_size).uniform_(*D_range)
+        elif seeds is not None:
+            generator = torch.Generator()
+            assert len(seeds) == batch_size
+            self.A_b = torch.empty(batch_size).uniform_(*A_range)
+            self.B_b = torch.empty(batch_size).uniform_(*B_range)
+            self.C_b = torch.empty(batch_size).uniform_(*C_range)
+            self.D_b = torch.empty(batch_size).uniform_(*D_range)
+
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.A_b[i] = torch.empty(1).uniform_(
+                    *A_range, generator=generator
+                )
+                self.B_b[i] = torch.empty(1).uniform_(
+                    *B_range, generator=generator
+                )
+                self.C_b[i] = torch.empty(1).uniform_(
+                    *C_range, generator=generator
+                )
+                self.D_b[i] = torch.empty(1).uniform_(
+                    *D_range, generator=generator
+                )
+        else:
+            raise NotImplementedError
+        
+    def evaluate(self, xs_b):
+        """
+        根据输入 xs_b 计算正弦函数的输出 ys_b。
+        - xs_b: 输入张量，形状为 (batch_size, n_points, n_dims)
+        返回:
+        - ys_b: 输出张量，形状为 (batch_size, n_points)
+        """
+        ys_b = torch.zeros(xs_b.shape[0], xs_b.shape[1], device=xs_b.device)
+        for i in range(xs_b.shape[0]):
+            # 计算正弦函数 y = A * sin(B * x + C) + D。
+            ys_b[i] = (
+                self.A_b[i] * torch.sin(
+                    self.B_b[i] * xs_b[i, :, 0] + self.C_b[i]
+                ) + self.D_b[i]
+            )
+        return ys_b
+        
+    @staticmethod
+    def get_metric():
+        return squared_error
+        
     @staticmethod
     def get_training_metric():
         return mean_squared_error
