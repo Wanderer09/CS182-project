@@ -79,7 +79,12 @@ relevant_model_names = {
         "3-Nearest Neighbors",
         "Averaging",
     ],
-
+    "hard_sine2square": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
 }
 
 

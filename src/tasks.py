@@ -67,6 +67,7 @@ def get_task_sampler(
         "sine":Sine,
         "hard_sine_regression":HardSineRegression,
         "hard_sine2sawtooth":HardSine2sawtooth,
+        "hard_sine2square":HardSine2square,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]
@@ -849,6 +850,26 @@ def generate_periodic_function(wave_type="sawtooth", T=2*math.pi, low=0.0, high=
     return f
 
 class HardSine2sawtooth(HardSineRegression):
+    def __init__(self, *args, periodic_kwargs=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.periodic_kwargs = periodic_kwargs or {
+            "wave_type": "sawtooth", "T": 2*math.pi, "low": 0.0, "high": 1.0
+        }
+
+    def evaluate(self, xs_b, mode="train"):
+        xs_proj = xs_b.mean(dim=2)
+        A, B, C, D = self.A.to(xs_b.device), self.B.to(xs_b.device), self.C.to(xs_b.device), self.D.to(xs_b.device)
+
+        if mode == "train":
+            return A[:, None] * torch.sin(B[:, None] * xs_proj + C[:, None]) + D[:, None]
+        elif mode == "test":
+            g = generate_periodic_function(**self.periodic_kwargs)
+            x_input = B[:, None] * xs_proj + C[:, None]
+            return A[:, None] * g(x_input) + D[:, None]
+        else:
+            raise ValueError(f"Unknown mode {mode}")
+
+class HardSine2square(HardSineRegression):
     def __init__(self, *args, periodic_kwargs=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.periodic_kwargs = periodic_kwargs or {

@@ -47,6 +47,7 @@ TASK_LIST = [
     "sine",
     "hard_sine_regression",
     "hard_sine2sawtooth",
+    "hard_sine2square",
 ]
 
 training_schema = {
