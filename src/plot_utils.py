@@ -85,6 +85,24 @@ relevant_model_names = {
         "3-Nearest Neighbors",
         "Averaging",
     ],
+    "hard_sine2tanh": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
+    "tanh_inverse_regression": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
+    "poly2tanhregression": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
 }
 
 

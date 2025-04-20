@@ -1,0 +1,30 @@
+inherit:
+  - base.yaml
+
+training:
+  task: poly2tanhregression
+  batch_size: 64
+  num_tasks: 10000
+  task_kwargs:
+    degree: 3
+    scale: 1.0
+  curriculum:
+    points:
+      start: 1
+      end: 40
+      inc: 1
+      interval: 250
+    dims:
+      start: 1
+      end: 40
+      inc: 1
+      interval: 250
+
+out_dir: ../models/poly2tanhregression
+
+wandb:
+  project: tanh-eval
+  entity: hzg040122-uc-berkeley-electrical-engineering-computer-sc
+  name: "poly2tanhregression-run"
+  notes: "Training on poly(x), testing on tanh(poly(x))"
+  log_every_steps: 10
