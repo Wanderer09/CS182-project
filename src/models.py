@@ -126,6 +126,16 @@ def get_relevant_baselines(task_name):
             (NNModel, {"n_neighbors": 3}),
             (AveragingModel, {}),
         ],
+        "sine2poly": [
+            (LeastSquaresModel, {}),
+            (NNModel, {"n_neighbors": 3}),
+            (AveragingModel, {}),
+        ],
+        "hard_sine2poly": [
+            (LeastSquaresModel, {}),
+            (NNModel, {"n_neighbors": 3}),
+            (AveragingModel, {}),
+        ],
     }
 
     models = [model_cls(**kwargs) for model_cls, kwargs in task_to_baselines[task_name]]

@@ -51,6 +51,8 @@ TASK_LIST = [
     "hard_sine2tanh",
     "tanh_inverse_regression",
     "poly2tanhregression",
+    "sine2poly",
+    "hard_sine2poly",
 ]
 
 training_schema = {

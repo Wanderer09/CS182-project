@@ -103,6 +103,18 @@ relevant_model_names = {
         "3-Nearest Neighbors",
         "Averaging",
     ],
+    "sine2poly": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
+    "hard_sine2poly": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
 }
 
 

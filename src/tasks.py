@@ -71,6 +71,8 @@ def get_task_sampler(
         "hard_sine2tanh":HardSine2Tanh,
         "tanh_inverse_regression": TanhInverseRegression,
         "poly2tanhregression":Poly2TanhRegression,
+        "sine2poly":Sine2PolyRegression,
+        "hard_sine2poly":HardSine2PolyRegression,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]
@@ -1035,3 +1037,147 @@ class Poly2TanhRegression(Task):
     @staticmethod
     def get_training_metric():
         return mean_squared_error
+
+import torch
+import math
+from tasks import Task, squared_error, mean_squared_error
+
+class Sine2PolyRegression(Task):
+    def __init__(self, n_dims, batch_size, pool_dict=None, seeds=None, degree=3, scale=1.0):
+        super().__init__(n_dims, batch_size, pool_dict, seeds)
+        self.scale = scale
+        self.degree = degree
+
+        # A 用于 sine 训练函数
+        if pool_dict is None and seeds is None:
+            self.A = torch.randn(self.b_size, self.n_dims, 1)
+            self.coeffs = torch.randn(self.b_size, degree + 1, n_dims)
+        elif seeds is not None:
+            self.A = torch.zeros(self.b_size, self.n_dims, 1)
+            self.coeffs = torch.zeros(self.b_size, degree + 1, n_dims)
+            generator = torch.Generator()
+            assert len(seeds) == self.b_size
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.A[i] = torch.randn(self.n_dims, 1, generator=generator)
+                self.coeffs[i] = torch.randn(degree + 1, n_dims, generator=generator)
+        else:
+            assert "A" in pool_dict and "coeffs" in pool_dict
+            indices = torch.randperm(len(pool_dict["A"]))[:batch_size]
+            self.A = pool_dict["A"][indices]
+            self.coeffs = pool_dict["coeffs"][indices]
+
+    def evaluate(self, xs_b, mode="train"):
+        if mode == "train":
+            A = self.A.to(xs_b.device)
+            xsA = (xs_b @ A)[:, :, 0]
+            return torch.sin(xsA) * self.scale
+        elif mode == "test":
+            powers = [xs_b ** i for i in range(self.degree + 1)]  # [(b, p, d)]
+            result = torch.zeros(xs_b.shape[0], xs_b.shape[1], device=xs_b.device)
+            for i, x_pow in enumerate(powers):
+                term = (x_pow * self.coeffs[:, i].unsqueeze(1).to(xs_b.device)).sum(dim=2)
+                result += term
+            return result * self.scale
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, degree=3, **kwargs):
+        return {
+            "A": torch.randn(num_tasks, n_dims, 1),
+            "coeffs": torch.randn(num_tasks, degree + 1, n_dims)
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+    
+import torch
+import math
+from tasks import Task, squared_error, mean_squared_error
+
+class HardSine2PolyRegression(Task):
+    """
+    训练：HardSine（y = A * sin(Bx + C) + D）
+    测试：Poly（x）
+    """
+    def __init__(self, n_dims, batch_size, pool_dict=None, seeds=None,
+                 A_range=(0.5, 2.0), B_range=(0.5, 2.0), C_range=(0.0, math.pi),
+                 D_range=(-1.0, 1.0), degree=3, scale=1.0):
+        super().__init__(n_dims, batch_size, pool_dict, seeds)
+        self.A_range = A_range
+        self.B_range = B_range
+        self.C_range = C_range
+        self.D_range = D_range
+        self.degree = degree
+        self.scale = scale
+
+        if pool_dict is None and seeds is None:
+            self.A = torch.empty(batch_size).uniform_(*A_range)
+            self.B = torch.empty(batch_size).uniform_(*B_range)
+            self.C = torch.empty(batch_size).uniform_(*C_range)
+            self.D = torch.empty(batch_size).uniform_(*D_range)
+            self.coeffs = torch.randn(batch_size, degree + 1, n_dims)
+        elif seeds is not None:
+            generator = torch.Generator()
+            self.A = torch.zeros(batch_size)
+            self.B = torch.zeros(batch_size)
+            self.C = torch.zeros(batch_size)
+            self.D = torch.zeros(batch_size)
+            self.coeffs = torch.zeros(batch_size, degree + 1, n_dims)
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.A[i] = torch.empty(1).uniform_(*A_range, generator=generator)
+                self.B[i] = torch.empty(1).uniform_(*B_range, generator=generator)
+                self.C[i] = torch.empty(1).uniform_(*C_range, generator=generator)
+                self.D[i] = torch.empty(1).uniform_(*D_range, generator=generator)
+                self.coeffs[i] = torch.randn(degree + 1, n_dims, generator=generator)
+        else:
+            assert all(k in pool_dict for k in ["A", "B", "C", "D", "coeffs"])
+            indices = torch.randperm(len(pool_dict["A"]))[:batch_size]
+            self.A = pool_dict["A"][indices]
+            self.B = pool_dict["B"][indices]
+            self.C = pool_dict["C"][indices]
+            self.D = pool_dict["D"][indices]
+            self.coeffs = pool_dict["coeffs"][indices]
+
+    def evaluate(self, xs_b, mode="train"):
+        xs_proj = xs_b.mean(dim=2)  # shape: (b, p)
+        A, B, C, D = self.A.to(xs_b.device), self.B.to(xs_b.device), self.C.to(xs_b.device), self.D.to(xs_b.device)
+
+        if mode == "train":
+            return A[:, None] * torch.sin(B[:, None] * xs_proj + C[:, None]) + D[:, None]
+        elif mode == "test":
+            # 计算 poly(x)
+            powers = [xs_b ** i for i in range(self.degree + 1)]  # [(b, p, d)]
+            result = torch.zeros(xs_b.shape[0], xs_b.shape[1], device=xs_b.device)
+            for i, x_pow in enumerate(powers):
+                term = (x_pow * self.coeffs[:, i].unsqueeze(1).to(xs_b.device)).sum(dim=2)
+                result += term
+            return result * self.scale
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, degree=3, **kwargs):
+        return {
+            "A": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "B": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "C": torch.empty(num_tasks).uniform_(0.0, math.pi),
+            "D": torch.empty(num_tasks).uniform_(-1.0, 1.0),
+            "coeffs": torch.randn(num_tasks, degree + 1, n_dims),
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+
