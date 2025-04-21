@@ -1,0 +1,17 @@
+inherit: 
+    - base.yaml
+
+training:
+    task: polynomial_regression
+    task_kwargs: {}
+    curriculum:
+        points:
+            start: 26
+            end: 101
+            inc: 2
+            interval: 2000
+
+out_dir: ../models/polynomial_regression_1_dim
+
+wandb:
+    name: "polynomial_regression_1_dim"

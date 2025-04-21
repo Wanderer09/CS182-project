@@ -37,6 +37,13 @@ relevant_model_names = {
         "3-Nearest Neighbors",
         "2-layer NN, GD",
     ],
+    "polynomial_regression_1dim": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+        "Oracle_Poly_Fit",
+    ],
 }
 
 

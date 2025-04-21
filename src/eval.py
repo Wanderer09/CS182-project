@@ -13,6 +13,7 @@ import models
 from samplers import get_data_sampler, sample_transformation
 from tasks import get_task_sampler
 
+USE_TANH = True
 
 def get_model_from_run(run_path, step=-1, only_conf=False):
     config_path = os.path.join(run_path, "config.yaml")
@@ -48,18 +49,33 @@ def eval_batch(model, task_sampler, xs, xs_p=None):
     if xs_p is None:
         ys = task.evaluate(xs)
         pred = model(xs.to(device), ys.to(device)).detach()
-        metrics = task.get_metric()(pred.cpu(), ys)
+
+        if USE_TANH:
+            ys = torch.tanh(ys)
+            pred = torch.tanh(pred)
+
+        metrics = task.get_metric()(pred.cpu(), ys.cpu())
+
     else:
         b_size, n_points, _ = xs.shape
         metrics = torch.zeros(b_size, n_points)
         for i in range(n_points):
             xs_comb = torch.cat((xs[:, :i, :], xs_p[:, i:, :]), dim=1)
             ys = task.evaluate(xs_comb)
-
             pred = model(xs_comb.to(device), ys.to(device), inds=[i]).detach()
-            metrics[:, i] = task.get_metric()(pred.cpu(), ys)[:, i]
+
+            if USE_TANH:
+                ys = torch.tanh(ys)
+                pred = torch.tanh(pred)
+
+            metrics[:, i] = task.get_metric()(pred.cpu(), ys.cpu())[:, i]
+            
+    # print("After tanh, pred stats:", pred.min().item(), pred.max().item())
+    # print("After tanh, ys stats:", ys.min().item(), ys.max().item())
+
 
     return metrics
+
 
 
 # Functions for generating different kinds of train/test data
@@ -348,6 +364,8 @@ def baseline_names(name):
         return "Greedy Tree Learning"
     if "xgboost" in name:
         return "XGBoost"
+    if "Oracle_Poly_Fit" in name:
+        return "Oracle_Poly_Fit"
     return name
 
 

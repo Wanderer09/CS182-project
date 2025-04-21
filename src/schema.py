@@ -41,6 +41,7 @@ TASK_LIST = [
     "relu_2nn_regression",
     "decision_tree",
     "sine",
+    "polynomial_regression",
 ]
 
 training_schema = {

@@ -61,6 +61,7 @@ def get_task_sampler(
         "relu_2nn_regression": Relu2nnRegression,
         "decision_tree": DecisionTree,
         "sine": Sine,
+        "polynomial_regression": PolynomialRegression,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]
@@ -425,6 +426,90 @@ class Sine(Task):
     def get_metric():
         return squared_error
         
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+
+class PolynomialRegression(Task):
+    def __init__(
+        self,
+        n_dims,                     # 输入维度
+        batch_size,                 # 任务数量
+        degree=None,                   # 最高次数
+        coeff_range=(-1.0, 1.0),    # 多项式系数范围
+        noise_std=0.0,              # 高斯噪声标准差
+        renormalize_ys=False,       # 输出重新归一化
+        pool_dict=None,             # 任务池支持（复用已有任务）
+        seeds=None,
+    ):
+        assert n_dims == 1, "Polynomial task only supports 1D input x."
+        super(PolynomialRegression, self).__init__(n_dims, batch_size, pool_dict, seeds)
+        
+        if degree is None:
+            degree = 3
+
+        self.degree = degree
+        self.coeff_range = coeff_range
+        self.noise_std = noise_std
+        self.renormalize_ys = renormalize_ys
+
+        # 如果不从 pool 复用任务，也没有指定随机种子，则直接随机生成一批任务的多项式系数
+        if pool_dict is None and seeds is None:
+            self.coeffs = torch.empty(batch_size, degree + 1).uniform_(*coeff_range)
+        
+        # 若指定种子，则为每个任务使用对应 seed 来生成可复现的多项式系数
+        elif seeds is not None:
+            self.coeffs = torch.zeros(batch_size, degree + 1)
+            generator = torch.Generator()
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.coeffs[i] = torch.empty(degree + 1).uniform_(*coeff_range, generator=generator)
+        
+        # 若指定了任务池 pool_dict，则从其中按顺序抽取任务
+        else:
+            assert "coeffs" in pool_dict
+            indices = torch.randperm(len(pool_dict["coeffs"]))[:batch_size]
+            self.coeffs = pool_dict["coeffs"][indices]
+
+    def evaluate(self, xs_b):
+        """
+        根据输入 xs_b 计算多项式函数输出
+        输入: xs_b，形状为 (batch_size, n_points, 1)
+        输出: ys_b，形状为 (batch_size, n_points)
+        """
+        x = xs_b.squeeze(-1)  # 从 (B, N, 1) → (B, N)
+        B, N = x.shape
+
+        # 构造多项式每阶的幂次项：powers[b, n, k] = x[b, n]^k
+        powers = torch.stack([x ** k for k in range(self.degree + 1)], dim=-1)  # (B, N, degree+1)
+
+        # 将每个任务的系数扩展形状：(B, 1, degree+1) 方便广播计算
+        coeffs = self.coeffs.to(x.device).unsqueeze(1)
+
+        # 执行多项式计算：y = sum_k (a_k * x^k)
+        ys = torch.sum(powers * coeffs, dim=-1)  # (B, N)
+
+        # 添加高斯噪声（如果设定了 noise_std > 0）
+        if self.noise_std > 0:
+            ys += torch.randn_like(ys) * self.noise_std
+
+        # 重新归一化输出（使其标准差与维度无关，适合训练）
+        if self.renormalize_ys:
+            ys = ys * math.sqrt(self.degree + 1) / ys.std()
+
+        return ys
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, degree=3, coeff_range=(-1.0, 1.0), **kwargs):
+        # 批量生成一组任务池，包含多个多项式系数向量
+        return {
+            "coeffs": torch.empty(num_tasks, degree + 1).uniform_(*coeff_range)
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
     @staticmethod
     def get_training_metric():
         return mean_squared_error

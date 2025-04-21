@@ -10,7 +10,6 @@ import xgboost as xgb
 
 from base_models import NeuralNetwork, ParallelNetworks
 
-
 def build_model(conf):
     """
     根据配置构建模型。
@@ -85,6 +84,12 @@ def get_relevant_baselines(task_name):
             (DecisionTreeModel, {"max_depth": None}),
             (XGBoostModel, {}),
             (AveragingModel, {}),
+        ],
+        "polynomial_regression": [
+            (LeastSquaresModel, {}),
+            (NNModel, {"n_neighbors": 3}),
+            (AveragingModel, {}),
+            (OraclePolynomialEstimator, {"degree": 7}),
         ],
     }
 
@@ -214,7 +219,7 @@ class NNModel:
                 pred.append((w * y).sum() / w.sum())
             preds.append(torch.stack(pred))
 
-        return torch.stack(preds, dim=1)
+        return torch.tanh(torch.stack(preds, dim=1))
 
 
 class LeastSquaresModel:
@@ -257,7 +262,7 @@ class LeastSquaresModel:
             pred = test_x @ ws
             preds.append(pred[:, 0, 0])
 
-        return torch.stack(preds, dim=1)
+        return torch.tanh(torch.stack(preds, dim=1))
 
 
 class AveragingModel:
@@ -295,7 +300,7 @@ class AveragingModel:
             pred = test_x @ w_p
             preds.append(pred[:, 0, 0])
 
-        return torch.stack(preds, dim=1)
+        return torch.tanh(torch.stack(preds, dim=1))
 
 
 class LassoModel:
@@ -559,3 +564,44 @@ class XGBoostModel:
             preds.append(pred)
 
         return torch.stack(preds, dim=1)
+
+class OraclePolynomialEstimator:
+    """
+    拟合 context 的多项式回归模型，并对 query 做预测。
+    """
+    def __init__(self, degree):
+        self.degree = degree
+        self.name = f"Oracle_Poly_Fit"
+
+    def __call__(self, xs, ys, inds=None):
+        B, T, D = xs.shape
+
+        if inds is None:
+            inds = range(T)
+
+        preds = []
+        for i in inds:
+            if i == 0:
+                preds.append(torch.zeros(B))
+                continue
+
+            x_context = xs[:, :i, 0]  # (B, i)
+            y_context = ys[:, :i]    # (B, i)
+            x_query = xs[:, i, 0]    # (B,)
+
+            batch_preds = []
+            for b in range(B):
+                x_b = x_context[b]  # (i,)
+                y_b = y_context[b]  # (i,)
+                # 构造 Vandermonde 矩阵 (i, degree+1)
+                A = torch.stack([x_b ** j for j in range(self.degree + 1)], dim=1)
+                # 最小二乘拟合 (degree+1, 1)
+                coeff, *_ = torch.linalg.lstsq(A, y_b.unsqueeze(-1))
+                # query 点特征 (degree+1,)
+                x_q_feat = torch.stack([x_query[b] ** j for j in range(self.degree + 1)])
+                y_q = (x_q_feat @ coeff).squeeze()
+                batch_preds.append(y_q)
+
+            preds.append(torch.stack(batch_preds))  # (B,)
+
+        return torch.tanh(torch.stack(preds, dim=1))  # (B, T)
