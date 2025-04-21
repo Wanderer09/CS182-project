@@ -76,6 +76,8 @@ def get_task_sampler(
         "tanh_poly_regression":TanhPolyRegression,
         "poly_to_bounded_regression":PolyToBoundedRegression,
         "poly_to_softsign_regression":PolyToSoftsignRegression,
+        "exp_regression":ExpRegression,
+        "sine2exp":Sine2Exp,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]
@@ -1321,6 +1323,167 @@ class PolyToSoftsignRegression(Task):
     def generate_pool_dict(n_dims, num_tasks, degree=3, **kwargs):
         return {
             "coeffs": torch.randn(num_tasks, degree + 1, n_dims)
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+    
+class ExpRegression(Task):
+    """
+    指数回归任务：y = A * exp(B * x) + C
+    """
+    def __init__(
+        self,
+        n_dims,
+        batch_size,
+        pool_dict=None,
+        seeds=None,
+        A_range=(0.1, 1.0),
+        B_range=(0.1, 1.0),  # 避免指数爆炸
+        C_range=(-1.0, 1.0),
+    ):
+        super().__init__(n_dims, batch_size, pool_dict, seeds)
+        self.A_range = A_range
+        self.B_range = B_range
+        self.C_range = C_range
+
+        if pool_dict is None and seeds is None:
+            self.A = torch.empty(batch_size).uniform_(*A_range)
+            self.B = torch.empty(batch_size).uniform_(*B_range)
+            self.C = torch.empty(batch_size).uniform_(*C_range)
+        elif seeds is not None:
+            generator = torch.Generator()
+            self.A = torch.zeros(batch_size)
+            self.B = torch.zeros(batch_size)
+            self.C = torch.zeros(batch_size)
+            assert len(seeds) == batch_size
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.A[i] = torch.empty(1).uniform_(*A_range, generator=generator)
+                self.B[i] = torch.empty(1).uniform_(*B_range, generator=generator)
+                self.C[i] = torch.empty(1).uniform_(*C_range, generator=generator)
+        else:
+            assert all(k in pool_dict for k in ["A", "B", "C"])
+            indices = torch.randperm(len(pool_dict["A"]))[:batch_size]
+            self.A = pool_dict["A"][indices]
+            self.B = pool_dict["B"][indices]
+            self.C = pool_dict["C"][indices]
+
+    def evaluate(self, xs_b, mode="train"):
+        xs_proj = xs_b.mean(dim=2)  # (b, p)
+        A, B, C = self.A.to(xs_b.device), self.B.to(xs_b.device), self.C.to(xs_b.device)
+        ys_b = A[:, None] * torch.exp(B[:, None] * xs_proj) + C[:, None]
+        return ys_b
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, **kwargs):
+        return {
+            "A": torch.empty(num_tasks).uniform_(0.1, 1.0),
+            "B": torch.empty(num_tasks).uniform_(0.1, 1.0),
+            "C": torch.empty(num_tasks).uniform_(-1.0, 1.0),
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+
+class Sine2Exp(Task):
+    """
+    训练于 y = A * sin(Bx + C) + D
+    验证于 y = E * exp(Fx) + G
+    """
+
+    def __init__(
+        self,
+        n_dims,
+        batch_size,
+        pool_dict=None,
+        seeds=None,
+        A_range=(0.5, 2.0),
+        B_range=(0.5, 2.0),
+        C_range=(0.0, math.pi),
+        D_range=(-1.0, 1.0),
+        E_range=(0.5, 2.0),
+        F_range=(0.1, 0.9),
+        G_range=(-1.0, 1.0),
+    ):
+        super().__init__(n_dims, batch_size, pool_dict, seeds)
+
+        if pool_dict is None and seeds is None:
+            self.A = torch.empty(batch_size).uniform_(*A_range)
+            self.B = torch.empty(batch_size).uniform_(*B_range)
+            self.C = torch.empty(batch_size).uniform_(*C_range)
+            self.D = torch.empty(batch_size).uniform_(*D_range)
+            self.E = torch.empty(batch_size).uniform_(*E_range)
+            self.F = torch.empty(batch_size).uniform_(*F_range)
+            self.G = torch.empty(batch_size).uniform_(*G_range)
+
+        elif seeds is not None:
+            generator = torch.Generator()
+            self.A = torch.zeros(batch_size)
+            self.B = torch.zeros(batch_size)
+            self.C = torch.zeros(batch_size)
+            self.D = torch.zeros(batch_size)
+            self.E = torch.zeros(batch_size)
+            self.F = torch.zeros(batch_size)
+            self.G = torch.zeros(batch_size)
+            assert len(seeds) == batch_size
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.A[i] = torch.empty(1).uniform_(*A_range, generator=generator)
+                self.B[i] = torch.empty(1).uniform_(*B_range, generator=generator)
+                self.C[i] = torch.empty(1).uniform_(*C_range, generator=generator)
+                self.D[i] = torch.empty(1).uniform_(*D_range, generator=generator)
+                self.E[i] = torch.empty(1).uniform_(*E_range, generator=generator)
+                self.F[i] = torch.empty(1).uniform_(*F_range, generator=generator)
+                self.G[i] = torch.empty(1).uniform_(*G_range, generator=generator)
+
+        elif pool_dict is not None:
+            assert all(k in pool_dict for k in ["A", "B", "C", "D", "E", "F", "G"])
+            indices = torch.randperm(len(pool_dict["A"]))[:batch_size]
+            self.A = pool_dict["A"][indices]
+            self.B = pool_dict["B"][indices]
+            self.C = pool_dict["C"][indices]
+            self.D = pool_dict["D"][indices]
+            self.E = pool_dict["E"][indices]
+            self.F = pool_dict["F"][indices]
+            self.G = pool_dict["G"][indices]
+
+        else:
+            raise ValueError("Must specify either pool_dict or seeds (or neither).")
+
+    def evaluate(self, xs_b, mode="train"):
+        xs_proj = xs_b.mean(dim=2)  # shape: (b, p)
+        if mode == "train":
+            return self.A[:, None].to(xs_b.device) * torch.sin(
+                self.B[:, None].to(xs_b.device) * xs_proj + self.C[:, None].to(xs_b.device)
+            ) + self.D[:, None].to(xs_b.device)
+        elif mode == "test":
+            return self.E[:, None].to(xs_b.device) * torch.exp(
+                self.F[:, None].to(xs_b.device) * xs_proj
+            ) + self.G[:, None].to(xs_b.device)
+        else:
+            raise ValueError(f"Unknown mode {mode}")
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, **kwargs):
+        return {
+            "A": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "B": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "C": torch.empty(num_tasks).uniform_(0.0, math.pi),
+            "D": torch.empty(num_tasks).uniform_(-1.0, 1.0),
+            "E": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "F": torch.empty(num_tasks).uniform_(0.1, 0.9),
+            "G": torch.empty(num_tasks).uniform_(-1.0, 1.0),
         }
 
     @staticmethod

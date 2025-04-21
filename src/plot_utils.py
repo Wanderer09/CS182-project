@@ -132,7 +132,19 @@ relevant_model_names = {
         "Least Squares",
         "3-Nearest Neighbors",
         "Averaging",
-    ]
+    ],
+    "exp_regression" : [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
+    "sine2exp" : [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
 }
 
 

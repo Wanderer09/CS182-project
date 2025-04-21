@@ -56,6 +56,8 @@ TASK_LIST = [
     "tanh_poly_regression",
     "poly_to_bounded_regression",
     "poly_to_softsign_regression",
+    "exp_regression",
+    "sine2exp",
 ]
 
 training_schema = {
