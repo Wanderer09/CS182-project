@@ -55,6 +55,7 @@ TASK_LIST = [
     "hard_sine2poly",
     "tanh_poly_regression",
     "poly_to_bounded_regression",
+    "poly_to_softsign_regression",
 ]
 
 training_schema = {
