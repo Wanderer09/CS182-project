@@ -1,0 +1,30 @@
+inherit:
+  - base.yaml
+
+training:
+  task: poly_to_bounded_regression
+  batch_size: 64
+  num_tasks: 10000
+  curriculum:
+    points:
+      start: 1
+      end: 32
+      inc: 1
+      interval: 200
+    dims:
+      start: 1
+      end: 10
+      inc: 1
+      interval: 200
+  task_kwargs:
+    degree: 3
+    scale: 1.0
+
+out_dir: ../models/poly_to_bounded_regression
+
+wandb:
+  project: bounded-poly
+  entity: hzg040122-uc-berkeley-electrical-engineering-computer-sc
+  name: "poly-to-bounded-run"
+  notes: "Train and test on f(poly(x)), where f(x)=x/sqrt(1+x^2)"
+  log_every_steps: 10

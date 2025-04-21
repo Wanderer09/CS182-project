@@ -121,6 +121,12 @@ relevant_model_names = {
         "3-Nearest Neighbors",
         "Averaging",
     ],
+    "poly_to_bounded_regression": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
 }
 
 

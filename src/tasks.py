@@ -74,6 +74,7 @@ def get_task_sampler(
         "sine2poly":Sine2PolyRegression,
         "hard_sine2poly":HardSine2PolyRegression,
         "tanh_poly_regression":TanhPolyRegression,
+        "poly_to_bounded_regression":PolyToBoundedRegression,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]
@@ -1230,3 +1231,51 @@ class TanhPolyRegression(Task):
     def get_training_metric():
         return mean_squared_error
 
+class PolyToBoundedRegression(Task):
+    """
+    训练和验证都在 f(poly(x)) 上进行，其中 f(x) = x / sqrt(1 + x^2)
+    """
+    def __init__(self, n_dims, batch_size, pool_dict=None, seeds=None, degree=3, scale=1.0):
+        super().__init__(n_dims, batch_size, pool_dict, seeds)
+        self.degree = degree
+        self.scale = scale
+
+        if pool_dict is None and seeds is None:
+            self.coeffs = torch.randn(batch_size, degree + 1, n_dims)
+        elif seeds is not None:
+            self.coeffs = torch.zeros(batch_size, degree + 1, n_dims)
+            generator = torch.Generator()
+            assert len(seeds) == batch_size
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.coeffs[i] = torch.randn(degree + 1, n_dims, generator=generator)
+        else:
+            assert "coeffs" in pool_dict
+            indices = torch.randperm(len(pool_dict["coeffs"]))[:batch_size]
+            self.coeffs = pool_dict["coeffs"][indices]
+
+    def evaluate(self, xs_b, mode="train"):
+        powers = [xs_b ** i for i in range(self.degree + 1)]  # list of (b, p, d)
+        result = torch.zeros(xs_b.shape[0], xs_b.shape[1], device=xs_b.device)
+        for i, x_pow in enumerate(powers):
+            term = (x_pow * self.coeffs[:, i].unsqueeze(1).to(xs_b.device)).sum(dim=2)
+            result += term
+        poly_output = result * self.scale
+
+        # 映射到有界函数 f(x) = x / sqrt(1 + x^2)
+        bounded_output = poly_output / torch.sqrt(1 + poly_output ** 2)
+        return bounded_output
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, degree=3, **kwargs):
+        return {
+            "coeffs": torch.randn(num_tasks, degree + 1, n_dims)
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
