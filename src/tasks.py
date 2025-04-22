@@ -1412,8 +1412,8 @@ class Sine2Exp(Task):
         B_range=(0.5, 2.0),
         C_range=(0.0, math.pi),
         D_range=(-1.0, 1.0),
-        E_range=(0.5, 2.0),
-        F_range=(0.1, 0.9),
+        E_range=(0.5, 2.0),#0.5,2.0
+        F_range=(0.1, 0.9),#0.1,0.9
         G_range=(-1.0, 1.0),
     ):
         super().__init__(n_dims, batch_size, pool_dict, seeds)
@@ -1484,6 +1484,57 @@ class Sine2Exp(Task):
             "E": torch.empty(num_tasks).uniform_(0.5, 2.0),
             "F": torch.empty(num_tasks).uniform_(0.1, 0.9),
             "G": torch.empty(num_tasks).uniform_(-1.0, 1.0),
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+    
+
+
+class NewTanhPolyRegression(Task):
+    """
+    y = tanh(poly(x))，其中 poly(x) 是一个多项式
+    系数范围通过 coeff_range 参数指定
+    """
+    def __init__(self, n_dims, batch_size, pool_dict=None, seeds=None,
+                 degree=3, scale=1.0, coeff_range=(-0.5, 0.5)):
+        super().__init__(n_dims, batch_size, pool_dict, seeds)
+        self.scale = scale
+        self.degree = degree
+        self.coeff_range = coeff_range
+
+        if pool_dict is None and seeds is None:
+            self.coeffs = torch.empty(batch_size, degree + 1, n_dims).uniform_(*coeff_range)
+        elif seeds is not None:
+            self.coeffs = torch.zeros(batch_size, degree + 1, n_dims)
+            generator = torch.Generator()
+            assert len(seeds) == batch_size
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.coeffs[i] = torch.empty(degree + 1, n_dims).uniform_(*coeff_range, generator=generator)
+        else:
+            assert "coeffs" in pool_dict
+            indices = torch.randperm(len(pool_dict["coeffs"]))[:batch_size]
+            self.coeffs = pool_dict["coeffs"][indices]
+
+    def evaluate(self, xs_b, mode="train"):
+        powers = [xs_b ** i for i in range(self.degree + 1)]
+        result = torch.zeros(xs_b.shape[0], xs_b.shape[1], device=xs_b.device)
+        for i, x_pow in enumerate(powers):
+            term = (x_pow * self.coeffs[:, i].unsqueeze(1).to(xs_b.device)).sum(dim=2)
+            result += term
+        output = torch.tanh(result * self.scale)
+        return output
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, degree=3, coeff_range=(-0.5, 0.5), **kwargs):
+        return {
+            "coeffs": torch.empty(num_tasks, degree + 1, n_dims).uniform_(*coeff_range)
         }
 
     @staticmethod
