@@ -1,0 +1,32 @@
+inherit:
+  - base.yaml
+
+training:
+  task: new_tanh_poly_regression
+  batch_size: 64
+  num_tasks: 10000
+  task_kwargs:
+    degree: 3
+    scale: 1.0
+    coeff_range: [-0.05, 0.05]  # <-- 你可以改成 [-1.0, 1.0] 等任意值
+
+  curriculum:
+    points:
+      start: 1
+      end: 32
+      inc: 1
+      interval: 200
+    dims:
+      start: 1
+      end: 10
+      inc: 1
+      interval: 200
+
+out_dir: ../models/new_tanh_poly_regression
+
+wandb:
+  project: poly-test
+  entity: hzg040122-uc-berkeley-electrical-engineering-computer-sc
+  name: "new_tanh_poly_regression-run"
+  notes: "Training/testing on tanh(poly(x)), configurable coeff_range"
+  log_every_steps: 10

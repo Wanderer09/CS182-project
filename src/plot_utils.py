@@ -145,6 +145,12 @@ relevant_model_names = {
         "3-Nearest Neighbors",
         "Averaging",
     ],
+    "new_tanh_poly_regression": [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
 }
 
 

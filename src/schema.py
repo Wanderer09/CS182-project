@@ -58,6 +58,7 @@ TASK_LIST = [
     "poly_to_softsign_regression",
     "exp_regression",
     "sine2exp",
+    "new_tanh_poly_regression",
 ]
 
 training_schema = {

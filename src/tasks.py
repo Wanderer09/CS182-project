@@ -78,6 +78,7 @@ def get_task_sampler(
         "poly_to_softsign_regression":PolyToSoftsignRegression,
         "exp_regression":ExpRegression,
         "sine2exp":Sine2Exp,
+        "new_tanh_poly_regression":NewTanhPolyRegression,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]

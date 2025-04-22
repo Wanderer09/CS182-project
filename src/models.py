@@ -160,7 +160,12 @@ def get_relevant_baselines(task_name):
             (LeastSquaresModel, {}),
             (NNModel, {"n_neighbors": 3}),
             (AveragingModel, {}),
-        ]
+        ],
+        "new_tanh_poly_regression": [
+            (LeastSquaresModel, {}),
+            (NNModel, {"n_neighbors": 3}),
+            (AveragingModel, {}),
+        ],
     }
     
 
