@@ -1409,12 +1409,12 @@ class Sine2Exp(Task):
         batch_size,
         pool_dict=None,
         seeds=None,
-        A_range=(0.5, 2.0),
+        A_range=(0.5, 10.0),#0.5,2.0
         B_range=(0.5, 2.0),
         C_range=(0.0, math.pi),
         D_range=(-1.0, 1.0),
-        E_range=(0.5, 2.0),#0.5,2.0
-        F_range=(0.1, 0.9),#0.1,0.9
+        E_range=(0.5, 10.0),#0.5,2.0
+        F_range=(0.1, 10.0),#0.1,0.9
         G_range=(-1.0, 1.0),
     ):
         super().__init__(n_dims, batch_size, pool_dict, seeds)
@@ -1478,12 +1478,12 @@ class Sine2Exp(Task):
     @staticmethod
     def generate_pool_dict(n_dims, num_tasks, **kwargs):
         return {
-            "A": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "A": torch.empty(num_tasks).uniform_(0.5, 10.0),
             "B": torch.empty(num_tasks).uniform_(0.5, 2.0),
             "C": torch.empty(num_tasks).uniform_(0.0, math.pi),
             "D": torch.empty(num_tasks).uniform_(-1.0, 1.0),
-            "E": torch.empty(num_tasks).uniform_(0.5, 2.0),
-            "F": torch.empty(num_tasks).uniform_(0.1, 0.9),
+            "E": torch.empty(num_tasks).uniform_(0.5, 10.0),
+            "F": torch.empty(num_tasks).uniform_(0.1, 10.0),
             "G": torch.empty(num_tasks).uniform_(-1.0, 1.0),
         }
 
