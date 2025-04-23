@@ -13,7 +13,7 @@ You can start by cloning our repository and following the steps below.
 2. Download [model checkpoints](https://github.com/Wanderer09/CS182-project/releases/download/initial/models.zip) and extract them in the current directory.
 
     ```
-    wget https://github.com/Wanderer09/CS182-project/releases/download/initial/models.zip
+    wget https://github.com/Wanderer09/CS182-project/releases/download/v1.0/models.zip
     unzip models.zip
     ```
 
