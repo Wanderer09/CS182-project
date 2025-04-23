@@ -11,9 +11,9 @@ training:
         D_range: [-1.0, 1.0]
     curriculum:
         points:
-            start: 26
-            end: 101
-            inc: 5
+            start: 11
+            end: 41
+            inc: 2
             interval: 2000
 
 out_dir: ../models/sine2exp

@@ -13,11 +13,6 @@ from scipy.optimize import curve_fit
 from base_models import NeuralNetwork, ParallelNetworks
 
 def build_model(conf):
-    """
-    根据配置构建模型。
-    - conf: 包含模型参数的配置对象
-    支持的模型类型：GPT-2。
-    """
     if conf.family == "gpt2":
         model = TransformerModel(
             n_dims=conf.n_dims,
@@ -33,31 +28,22 @@ def build_model(conf):
 
 
 def get_relevant_baselines(task_name):
-    """
-    根据任务名称返回相关的基线模型列表。
-    - task_name: 任务名称
-    返回值是模型类及其参数的列表。
-    """
     task_to_baselines = {
-        # 线性回归任务
         "linear_regression": [
             (LeastSquaresModel, {}),
             (NNModel, {"n_neighbors": 3}),
             (AveragingModel, {}),
         ],
-        # 线性分类任务
         "linear_classification": [
             (NNModel, {"n_neighbors": 3}),
             (AveragingModel, {}),
         ],
-        # 稀疏线性回归任务
         "sparse_linear_regression": [
             (LeastSquaresModel, {}),
             (NNModel, {"n_neighbors": 3}),
             (AveragingModel, {}),
         ]
         + [(LassoModel, {"alpha": alpha}) for alpha in [1, 0.1, 0.01, 0.001, 0.0001]],
-        # ReLU 两层神经网络回归任务
         "relu_2nn_regression": [
             (LeastSquaresModel, {}),
             (NNModel, {"n_neighbors": 3}),
@@ -78,7 +64,6 @@ def get_relevant_baselines(task_name):
                 },
             ),
         ],
-        # 决策树任务
         "decision_tree": [
             (LeastSquaresModel, {}),
             (NNModel, {"n_neighbors": 3}),
@@ -97,13 +82,9 @@ def get_relevant_baselines(task_name):
             (LeastSquaresModel, {}),
             (NNModel, {"n_neighbors": 3}),
             (AveragingModel, {}),
-            # (ExpFitModel, {}),
-            # (SineFitModel, {}),
-            # (SquareWaveFitModel, {}),
         ],
     }
 
-    # 根据任务名称实例化模型
     models = [model_cls(**kwargs) for model_cls, kwargs in task_to_baselines[task_name]]
     return models
 
@@ -115,7 +96,6 @@ class TransformerModel(nn.Module):
     """
     def __init__(self, n_dims, n_positions, n_embd=128, n_layer=12, n_head=4):
         super(TransformerModel, self).__init__()
-        # 配置 GPT-2 模型
         configuration = GPT2Config(
             n_positions=2 * n_positions,
             n_embd=n_embd,
@@ -130,21 +110,12 @@ class TransformerModel(nn.Module):
 
         self.n_positions = n_positions
         self.n_dims = n_dims
-        # 输入线性变换
         self._read_in = nn.Linear(n_dims, n_embd)
-        # GPT-2 主体
         self._backbone = GPT2Model(configuration)
-        # 输出线性变换
         self._read_out = nn.Linear(n_embd, 1)
 
     @staticmethod
     def _combine(xs_b, ys_b):
-        """
-        将输入 xs 和目标 ys 交错组合成一个序列。
-        - xs_b: 输入张量
-        - ys_b: 目标张量
-        返回交错后的张量。
-        """
         bsize, points, dim = xs_b.shape
         ys_b_wide = torch.cat(
             (
@@ -158,13 +129,6 @@ class TransformerModel(nn.Module):
         return zs
 
     def forward(self, xs, ys, inds=None):
-        """
-        前向传播。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         if inds is None:
             inds = torch.arange(ys.shape[1])
         else:
@@ -179,24 +143,12 @@ class TransformerModel(nn.Module):
 
 
 class NNModel:
-    """
-    最近邻模型。
-    - n_neighbors: 最近邻数量
-    - weights: 权重类型（"uniform" 或 "distance"）
-    """
     def __init__(self, n_neighbors, weights="uniform"):
         self.n_neighbors = n_neighbors
         self.weights = weights
         self.name = f"NN_n={n_neighbors}_{weights}"
 
     def __call__(self, xs, ys, inds=None):
-        """
-        根据输入和目标进行预测。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         if inds is None:
             inds = range(ys.shape[1])
         else:
@@ -207,7 +159,7 @@ class NNModel:
 
         for i in inds:
             if i == 0:
-                preds.append(torch.zeros_like(ys[:, 0]))  # 第一个点预测为零
+                preds.append(torch.zeros_like(ys[:, 0])) 
                 continue
             train_xs, train_ys = xs[:, :i], ys[:, :i]
             test_x = xs[:, i : i + 1]
@@ -217,7 +169,7 @@ class NNModel:
                 weights = torch.ones_like(dist)
             else:
                 weights = 1.0 / dist
-                inf_mask = torch.isinf(weights).float()  # 处理完全匹配的情况
+                inf_mask = torch.isinf(weights).float() 
                 inf_row = torch.any(inf_mask, axis=1)
                 weights[inf_row] = inf_mask[inf_row]
 
@@ -233,22 +185,11 @@ class NNModel:
 
 
 class LeastSquaresModel:
-    """
-    最小二乘模型。
-    - driver: 用于 torch.linalg.lstsq 的驱动器
-    """
     def __init__(self, driver=None):
         self.driver = driver
         self.name = f"OLS_driver={driver}"
 
     def __call__(self, xs, ys, inds=None):
-        """
-        根据输入和目标进行预测。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         xs, ys = xs.cpu(), ys.cpu()
         if inds is None:
             inds = range(ys.shape[1])
@@ -276,20 +217,10 @@ class LeastSquaresModel:
 
 
 class AveragingModel:
-    """
-    平均模型。
-    """
     def __init__(self):
         self.name = "averaging"
 
     def __call__(self, xs, ys, inds=None):
-        """
-        根据输入和目标进行预测。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         if inds is None:
             inds = range(ys.shape[1])
         else:
@@ -314,24 +245,12 @@ class AveragingModel:
 
 
 class LassoModel:
-    """
-    Lasso 回归模型。
-    - alpha: L1 正则化系数
-    - max_iter: 最大迭代次数
-    """
     def __init__(self, alpha, max_iter=100000):
         self.alpha = alpha
         self.max_iter = max_iter
         self.name = f"lasso_alpha={alpha}_max_iter={max_iter}"
 
     def __call__(self, xs, ys, inds=None):
-        """
-        根据输入和目标进行预测。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         xs, ys = xs.cpu(), ys.cpu()
 
         if inds is None:
@@ -374,16 +293,6 @@ class LassoModel:
 
 
 class GDModel:
-    """
-    梯度下降模型。
-    - model_class: 模型类
-    - model_class_args: 模型类参数
-    - opt_alg: 优化算法（"sgd" 或 "adam"）
-    - batch_size: 批量大小
-    - num_steps: 训练步数
-    - lr: 学习率
-    - loss_name: 损失函数名称
-    """
     def __init__(
         self,
         model_class,
@@ -405,13 +314,6 @@ class GDModel:
         self.name = f"gd_model_class={model_class}_model_class_args={model_class_args}_opt_alg={opt_alg}_lr={lr}_batch_size={batch_size}_num_steps={num_steps}_loss_name={loss_name}"
 
     def __call__(self, xs, ys, inds=None, verbose=False, print_step=100):
-        """
-        根据输入和目标进行预测。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         xs, ys = xs.cuda(), ys.cuda()
 
         if inds is None:
@@ -487,22 +389,11 @@ class GDModel:
 
 
 class DecisionTreeModel:
-    """
-    决策树模型。
-    - max_depth: 最大深度
-    """
     def __init__(self, max_depth=None):
         self.max_depth = max_depth
         self.name = f"decision_tree_max_depth={max_depth}"
 
     def __call__(self, xs, ys, inds=None):
-        """
-        根据输入和目标进行预测。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         xs, ys = xs.cpu(), ys.cpu()
 
         if inds is None:
@@ -533,20 +424,10 @@ class DecisionTreeModel:
 
 
 class XGBoostModel:
-    """
-    XGBoost 模型。
-    """
     def __init__(self):
         self.name = "xgboost"
 
     def __call__(self, xs, ys, inds=None):
-        """
-        根据输入和目标进行预测。
-        - xs: 输入张量
-        - ys: 目标张量
-        - inds: 需要预测的索引
-        返回预测结果。
-        """
         xs, ys = xs.cpu(), ys.cpu()
 
         if inds is None:
@@ -576,9 +457,6 @@ class XGBoostModel:
         return torch.stack(preds, dim=1)
 
 class OraclePolynomialEstimator:
-    """
-    拟合 context 的多项式回归模型，并对 query 做预测。
-    """
     def __init__(self, degree):
         self.degree = degree
         self.name = f"Oracle_Poly_Fit"
@@ -603,11 +481,8 @@ class OraclePolynomialEstimator:
             for b in range(B):
                 x_b = x_context[b]  # (i,)
                 y_b = y_context[b]  # (i,)
-                # 构造 Vandermonde 矩阵 (i, degree+1)
                 A = torch.stack([x_b ** j for j in range(self.degree + 1)], dim=1)
-                # 最小二乘拟合 (degree+1, 1)
                 coeff, *_ = torch.linalg.lstsq(A, y_b.unsqueeze(-1))
-                # query 点特征 (degree+1,)
                 x_q_feat = torch.stack([x_query[b] ** j for j in range(self.degree + 1)])
                 y_q = (x_q_feat @ coeff).squeeze()
                 batch_preds.append(y_q)
@@ -617,9 +492,6 @@ class OraclePolynomialEstimator:
         return torch.tanh(torch.stack(preds, dim=1))  # (B, T)
 
 class ExpFitModel:
-    """
-    使用非线性最小二乘法拟合 y = a * exp(bx) + c 的 baseline。
-    """
 
     def __init__(self):
         self.name = "exp_fit"
@@ -628,12 +500,6 @@ class ExpFitModel:
         return a * np.exp(b * x) + c
 
     def __call__(self, xs, ys, inds=None):
-        """
-        对 batch 中每个样本在第 i 个点之前拟合 exp 曲线，并预测第 i 个点。
-        - xs: (B, T, D) 输入张量
-        - ys: (B, T) 输出张量
-        - inds: 需要预测的位置列表
-        """
         xs, ys = xs.cpu().numpy(), ys.cpu().numpy()
 
         B, T, D = xs.shape
@@ -667,9 +533,6 @@ class ExpFitModel:
         return torch.stack(preds, dim=1)
     
 class SineFitModel:
-    """
-    使用非线性最小二乘法拟合 y = a * sin(bx + c) + d 的 baseline。
-    """
 
     def __init__(self):
         self.name = "sine_fit"
@@ -698,7 +561,6 @@ class SineFitModel:
                     y_j = ys[j, :i]
 
                     try:
-                        # 提供初始猜测值：a=1, b=1, c=0, d=0
                         popt, _ = curve_fit(
                             self.sine_func,
                             x_j,
@@ -710,17 +572,13 @@ class SineFitModel:
                         y_pred = self.sine_func(x_test, *popt)
                         pred[j] = y_pred
                     except Exception:
-                        pred[j] = 0.0  # 拟合失败时返回 0
+                        pred[j] = 0.0
 
             preds.append(torch.from_numpy(pred).float())
 
         return torch.stack(preds, dim=1)
 
 class SquareWaveFitModel:
-    """
-    基于非线性拟合的 square wave baseline。
-    拟合函数：y = A * square(2πx / T + φ) + D
-    """
 
     def __init__(self):
         self.name = "square_wave_fit"
@@ -748,7 +606,6 @@ class SquareWaveFitModel:
                     y_j = ys[j, :i]
 
                     try:
-                        # 初始值：T, φ, A, D
                         p0 = [2 * np.pi, 0.0, 1.0, 0.0]
                         popt, _ = curve_fit(self.square_wave, x_j, y_j, p0=p0, maxfev=10000)
                         x_test = xs[j, i, 0]

@@ -348,8 +348,8 @@ class DecisionTree(Task):
     
 class Sine(Task):
     """
-    正弦函数任务。
-    每个任务生成一个正弦函数 y = A * sin(B * x + C) + D。
+    Sine task
+    Aorted. Train please use Sine2Exp.
     """
     def __init__(
         self,
@@ -362,13 +362,6 @@ class Sine(Task):
          C_range=(0, math.pi),
         D_range=(-1.0, 1.0),
      ):
-        """
-        初始化正弦函数任务。
-        - 振幅范围 (A)
-        - 频率范围 (B)
-        - 相位范围 (C)
-        - 偏移范围 (D)
-        """
         super(Sine, self).__init__(n_dims, batch_size, pool_dict, seeds)
         self.A_range = A_range
         self.B_range = B_range
@@ -376,7 +369,6 @@ class Sine(Task):
         self.D_range = D_range
 
         if pool_dict is None and seeds is None:
-            # 随机生成参数
             self.A_b = torch.empty(batch_size).uniform_(*A_range)
             self.B_b = torch.empty(batch_size).uniform_(*B_range)
             self.C_b = torch.empty(batch_size).uniform_(*C_range)
@@ -407,15 +399,8 @@ class Sine(Task):
             raise NotImplementedError
         
     def evaluate(self, xs_b):
-        """
-        根据输入 xs_b 计算正弦函数的输出 ys_b。
-        - xs_b: 输入张量，形状为 (batch_size, n_points, n_dims)
-        返回:
-        - ys_b: 输出张量，形状为 (batch_size, n_points)
-        """
         ys_b = torch.zeros(xs_b.shape[0], xs_b.shape[1], device=xs_b.device)
         for i in range(xs_b.shape[0]):
-            # 计算正弦函数 y = A * sin(B * x + C) + D。
             ys_b[i] = (
                 self.A_b[i] * torch.sin(
                     self.B_b[i] * xs_b[i, :, 0] + self.C_b[i]
@@ -434,13 +419,13 @@ class Sine(Task):
 class PolynomialRegression(Task):
     def __init__(
         self,
-        n_dims,                     # 输入维度
-        batch_size,                 # 任务数量
-        degree=None,                   # 最高次数
-        coeff_range=(-1.0, 1.0),    # 多项式系数范围
-        noise_std=0.0,              # 高斯噪声标准差
-        renormalize_ys=False,       # 输出重新归一化
-        pool_dict=None,             # 任务池支持（复用已有任务）
+        n_dims,                     
+        batch_size,                 
+        degree=None,                
+        coeff_range=(-1.0, 1.0),    
+        noise_std=0.0,              
+        renormalize_ys=False,       
+        pool_dict=None,             
         seeds=None,
     ):
         assert n_dims == 1, "Polynomial task only supports 1D input x."
@@ -454,11 +439,9 @@ class PolynomialRegression(Task):
         self.noise_std = noise_std
         self.renormalize_ys = renormalize_ys
 
-        # 如果不从 pool 复用任务，也没有指定随机种子，则直接随机生成一批任务的多项式系数
         if pool_dict is None and seeds is None:
             self.coeffs = torch.empty(batch_size, degree + 1).uniform_(*coeff_range)
         
-        # 若指定种子，则为每个任务使用对应 seed 来生成可复现的多项式系数
         elif seeds is not None:
             self.coeffs = torch.zeros(batch_size, degree + 1)
             generator = torch.Generator()
@@ -466,35 +449,24 @@ class PolynomialRegression(Task):
                 generator.manual_seed(seed)
                 self.coeffs[i] = torch.empty(degree + 1).uniform_(*coeff_range, generator=generator)
         
-        # 若指定了任务池 pool_dict，则从其中按顺序抽取任务
         else:
             assert "coeffs" in pool_dict
             indices = torch.randperm(len(pool_dict["coeffs"]))[:batch_size]
             self.coeffs = pool_dict["coeffs"][indices]
 
     def evaluate(self, xs_b):
-        """
-        根据输入 xs_b 计算多项式函数输出
-        输入: xs_b，形状为 (batch_size, n_points, 1)
-        输出: ys_b，形状为 (batch_size, n_points)
-        """
-        x = xs_b.squeeze(-1)  # 从 (B, N, 1) → (B, N)
+        x = xs_b.squeeze(-1)  
         B, N = x.shape
 
-        # 构造多项式每阶的幂次项：powers[b, n, k] = x[b, n]^k
-        powers = torch.stack([x ** k for k in range(self.degree + 1)], dim=-1)  # (B, N, degree+1)
+        powers = torch.stack([x ** k for k in range(self.degree + 1)], dim=-1) 
 
-        # 将每个任务的系数扩展形状：(B, 1, degree+1) 方便广播计算
         coeffs = self.coeffs.to(x.device).unsqueeze(1)
 
-        # 执行多项式计算：y = sum_k (a_k * x^k)
-        ys = torch.sum(powers * coeffs, dim=-1)  # (B, N)
+        ys = torch.sum(powers * coeffs, dim=-1)
 
-        # 添加高斯噪声（如果设定了 noise_std > 0）
         if self.noise_std > 0:
             ys += torch.randn_like(ys) * self.noise_std
 
-        # 重新归一化输出（使其标准差与维度无关，适合训练）
         if self.renormalize_ys:
             ys = ys * math.sqrt(self.degree + 1) / ys.std()
 
@@ -502,7 +474,6 @@ class PolynomialRegression(Task):
 
     @staticmethod
     def generate_pool_dict(n_dims, num_tasks, degree=3, coeff_range=(-1.0, 1.0), **kwargs):
-        # 批量生成一组任务池，包含多个多项式系数向量
         return {
             "coeffs": torch.empty(num_tasks, degree + 1).uniform_(*coeff_range)
         }
@@ -517,10 +488,14 @@ class PolynomialRegression(Task):
     
 def generate_periodic_function(wave_type="sawtooth", T=2*math.pi, low=-1.0, high=1.0):
     """
-    返回一个周期函数 f(x)，满足：
-        - f(x + T) = f(x)
-        - 值域在 [low, high]
-        - 波形由 wave_type 决定
+    Generate a periodic function based on the specified wave type.
+    Args:
+        wave_type (str): Type of wave function to generate. Options: "sawtooth", "square", "triangle", "sin", "cos".
+        T (float): Period of the wave function.
+        low (float): Minimum value of the wave function.
+        high (float): Maximum value of the wave function.
+    Returns:
+        function: A function that takes an input x and returns the corresponding wave value.
     """
     def normalize(val):
         return low + (high - low) * val
@@ -556,7 +531,7 @@ def generate_periodic_function(wave_type="sawtooth", T=2*math.pi, low=-1.0, high
 
 def piecewise_high_freq_sine_gauss(x):
     """
-    分段高斯对齐高频正弦函数，x shape: (B, T) or (T,)
+    Piecewise high-frequency sine function.
     """
     out = torch.zeros_like(x)
     mask1 = x < -1.5
@@ -576,8 +551,8 @@ def piecewise_high_freq_sine_gauss(x):
     
 class Sine2Exp(Task):
     """
-    训练于 y = A * sin(Bx + C) + D
-    验证于 y = E * exp(Fx) + G
+    Train: Sine
+    Eval: Sine, Exp, Periodic, Decision Tree, Piecewise Sine, Combo Nonlinear
     """
 
     def __init__(
@@ -649,14 +624,14 @@ class Sine2Exp(Task):
         else:
             raise ValueError("Must specify either pool_dict or seeds (or neither).")
         
-        # 生成 binary decision tree 参数（只用于 eval）
+        # generate decision tree
         self.dt_tensor = torch.randint(
             low=0, high=n_dims, size=(batch_size, 2 ** (tree_depth + 1) - 1)
         )
         self.target_tensor = torch.randn(batch_size, 2 ** (tree_depth + 1) - 1)
         self.dt_thresholds = torch.empty(batch_size, 2 ** (tree_depth + 1) - 1).uniform_(-1.5, 1.5)
 
-    def evaluate(self, xs_b, mode="period"):
+    def evaluate(self, xs_b, mode="period"):        # PLEASE CHANGE THIS MODE WHEN DOING TRAINING AND EVAL #
         xs_proj = xs_b.mean(dim=2)  # shape: (b, p)
         if mode == "sine":
             return self.A[:, None].to(xs_b.device) * torch.sin(
@@ -669,7 +644,6 @@ class Sine2Exp(Task):
         elif mode == "period":
             g = generate_periodic_function(**self.periodic_config)
             x_input = self.B[:, None] * xs_proj + self.C[:, None]
-            # return self.A[:, None] * g(x_input) + self.D[:, None]
             return g(x_input)
         elif mode == "decision_tree":
             xs_proj = xs_b.mean(dim=2)          # (B, T)
@@ -687,11 +661,11 @@ class Sine2Exp(Task):
                 cur_nodes = torch.zeros(T, dtype=torch.long, device=xs_b.device)
 
                 for d in range(self.tree_depth):
-                    feature_id = dt[cur_nodes]              # 每个样本的节点用哪个维度
-                    thres = thresholds[cur_nodes]           # 当前节点的阈值
+                    feature_id = dt[cur_nodes]
+                    thres = thresholds[cur_nodes] 
 
                     x_values = xs_b[i, torch.arange(T), feature_id]  # shape: (T,)
-                    decisions = (x_values > thres).long()            # 非0阈值决策
+                    decisions = (x_values > thres).long()
                     cur_nodes = 2 * cur_nodes + 1 + decisions
 
                 ys_b[i] = target[cur_nodes]
@@ -703,7 +677,6 @@ class Sine2Exp(Task):
         elif mode == "combo_nonlinear":
             x_proj = xs_b.mean(dim=2)  # shape: (B, T)
             
-            # 偏移 & 拉伸：例如 offset=2.0, scale=1.5 将输入偏移出中心区
             offset = 2.0
             scale = 1.5
             x_shifted = scale * (x_proj + offset)

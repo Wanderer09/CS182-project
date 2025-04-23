@@ -1,19 +1,4 @@
-This repository contains the code and models for our paper:
-
-**What Can Transformers Learn In-Context? A Case Study of Simple Function Classes** <br>
-*Shivam Garg\*, Dimitris Tsipras\*, Percy Liang, Gregory Valiant* <br>
-Paper: http://arxiv.org/abs/2208.01066 <br><br>
-
-![](setting.jpg)
-
-```bibtex
-    @InProceedings{garg2022what,
-        title={What Can Transformers Learn In-Context? A Case Study of Simple Function Classes},
-        author={Shivam Garg and Dimitris Tsipras and Percy Liang and Gregory Valiant},
-        year={2022},
-        booktitle={arXiv preprint}
-    }
-```
+This repository contains the code and models for our CS182 project report:
 
 ## Getting started
 You can start by cloning our repository and following the steps below.
@@ -25,20 +10,17 @@ You can start by cloning our repository and following the steps below.
     conda activate in-context-learning
     ```
 
-2. Download [model checkpoints](https://github.com/dtsip/in-context-learning/releases/download/initial/models.zip) and extract them in the current directory.
+2. Download [model checkpoints](https://github.com/Wanderer09/CS182-project/releases/download/initial/models.zip) and extract them in the current directory.
 
     ```
-    wget https://github.com/dtsip/in-context-learning/releases/download/initial/models.zip
+    wget https://github.com/Wanderer09/CS182-project/releases/download/initial/models.zip
     unzip models.zip
     ```
 
-3. [Optional] If you plan to train, populate `conf/wandb.yaml` with you wandb info.
+3. If you plan to train, populate `conf/wandb.yaml` with you wandb info.
 
-That's it! You can now explore our pre-trained models or train your own. The key entry points
-are as follows (starting from `src`):
-- The `eval.ipynb` notebook contains code to load our own pre-trained models, plot the pre-computed metrics, and evaluate them on new data.
-- `train.py` takes as argument a configuration yaml from `conf` and trains the corresponding model. You can try `python train.py --config conf/toy.yaml` for a quick training run.
+- The `SineEval.ipynb` notebook contains code to load our own pre-trained models, plot the pre-computed metrics, and evaluate them on new data.
+- `train.py` takes as argument a configuration yaml from `conf` and trains the corresponding model. You can try `python train.py --config conf/sine2exp.yaml` for a quick training run.
+- Please notice that if you want to train, use sine2exp.yaml. Do not use sine.yaml. When evaluating, please change the "mode" choice in Sine2Exp.evaluate in tasks.py to "sine"!
+- If you met ImportError undefined symbol: iJIT_NotifyEvent, please check this issue: https://github.com/pytorch/pytorch/issues/123097.
 
-# Maintainers
-* [Shivam Garg](https://cs.stanford.edu/~shivamg/)
-* [Dimitris Tsipras](https://dtsipras.com/)
