@@ -44,6 +44,18 @@ relevant_model_names = {
         "Averaging",
         "Oracle_Poly_Fit",
     ],
+    "sine_task" : [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
+    "sine2exp" : [
+        "Transformer",
+        "Least Squares",
+        "3-Nearest Neighbors",
+        "Averaging",
+    ],
 }
 
 
@@ -57,13 +69,13 @@ def basic_plot(metrics, models=None, trivial=1.0):
     ax.axhline(trivial, ls="--", color="gray")
     for name, vs in metrics.items():
         ax.plot(vs["mean"], "-", label=name, color=palette[color % 10], lw=2)
-        low = vs["bootstrap_low"]
+        # low = vs["bootstrap_low"]
         high = vs["bootstrap_high"]
-        ax.fill_between(range(len(low)), low, high, alpha=0.3)
+        # ax.fill_between(range(len(low)), low, high, alpha=0.3)
         color += 1
     ax.set_xlabel("in-context examples")
     ax.set_ylabel("squared error")
-    ax.set_xlim(-1, len(low) + 0.1)
+    # ax.set_xlim(-1, len(low) + 0.1)
     ax.set_ylim(-0.1, 1.25)
 
     legend = ax.legend(loc="upper left", bbox_to_anchor=(1, 1))

@@ -13,7 +13,7 @@ import models
 from samplers import get_data_sampler, sample_transformation
 from tasks import get_task_sampler
 
-USE_TANH = True
+USE_TANH = False
 
 def get_model_from_run(run_path, step=-1, only_conf=False):
     config_path = os.path.join(run_path, "config.yaml")

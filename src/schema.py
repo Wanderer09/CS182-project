@@ -42,6 +42,7 @@ TASK_LIST = [
     "decision_tree",
     "sine",
     "polynomial_regression",
+    "sine2exp"
 ]
 
 training_schema = {

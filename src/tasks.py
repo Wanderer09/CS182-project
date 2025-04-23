@@ -62,6 +62,7 @@ def get_task_sampler(
         "decision_tree": DecisionTree,
         "sine": Sine,
         "polynomial_regression": PolynomialRegression,
+        "sine2exp": Sine2Exp,
     }
     if task_name in task_names_to_classes:
         task_cls = task_names_to_classes[task_name]
@@ -504,6 +505,224 @@ class PolynomialRegression(Task):
         # 批量生成一组任务池，包含多个多项式系数向量
         return {
             "coeffs": torch.empty(num_tasks, degree + 1).uniform_(*coeff_range)
+        }
+
+    @staticmethod
+    def get_metric():
+        return squared_error
+
+    @staticmethod
+    def get_training_metric():
+        return mean_squared_error
+    
+def generate_periodic_function(wave_type="sawtooth", T=2*math.pi, low=-1.0, high=1.0):
+    """
+    返回一个周期函数 f(x)，满足：
+        - f(x + T) = f(x)
+        - 值域在 [low, high]
+        - 波形由 wave_type 决定
+    """
+    def normalize(val):
+        return low + (high - low) * val
+
+    if wave_type == "sawtooth":
+        def f(x):
+            phase = (x % T) / T  # Normalize to [0, 1]
+            return normalize(phase)
+
+    elif wave_type == "square":
+        def f(x):
+            phase = (x % T) / T
+            return normalize((phase < 0.5).float())
+
+    elif wave_type == "triangle":
+        def f(x):
+            phase = (x % T) / T
+            triangle = 2 * torch.abs(phase - 0.5)  # V shape
+            return normalize(1 - triangle)
+
+    elif wave_type == "sin":
+        def f(x):
+            return normalize(0.5 * (torch.sin(2 * math.pi * x / T) + 1))
+
+    elif wave_type == "cos":
+        def f(x):
+            return normalize(0.5 * (torch.cos(2 * math.pi * x / T) + 1))
+
+    else:
+        raise ValueError(f"Unknown wave_type: {wave_type}")
+
+    return f
+
+def piecewise_high_freq_sine_gauss(x):
+    """
+    分段高斯对齐高频正弦函数，x shape: (B, T) or (T,)
+    """
+    out = torch.zeros_like(x)
+    mask1 = x < -1.5
+    mask2 = (x >= -1.5) & (x < -0.5)
+    mask3 = (x >= -0.5) & (x < 0.5)
+    mask4 = (x >= 0.5) & (x < 1.5)
+    mask5 = x >= 1.5
+
+    out[mask1] = torch.sin(2 * torch.pi * x[mask1])
+    out[mask2] = torch.sin(8 * torch.pi * x[mask2])
+    out[mask3] = torch.sin(16 * torch.pi * x[mask3])
+    out[mask4] = torch.sin(8 * torch.pi * x[mask4])
+    out[mask5] = torch.sin(2 * torch.pi * x[mask5])
+
+    return out
+
+    
+class Sine2Exp(Task):
+    """
+    训练于 y = A * sin(Bx + C) + D
+    验证于 y = E * exp(Fx) + G
+    """
+
+    def __init__(
+        self,
+        n_dims,
+        batch_size,
+        pool_dict=None,
+        seeds=None,
+        A_range=(0.1, 5.0),
+        B_range=(0.1, 5.0),
+        C_range=(0.0, math.pi),
+        D_range=(-1.0, 1.0),
+        E_range=(1.0, 1.0),
+        F_range=(1.0, 1.0),
+        G_range=(0.0, 0.0),
+        periodic_config = None,
+        tree_depth=4,
+    ):
+        super().__init__(n_dims, batch_size, pool_dict, seeds)
+        
+        self.periodic_config = {
+            "wave_type": "square",
+            "T": 2 * math.pi,
+            "low": -1.0,
+            "high": 1.0,
+        }
+        self.tree_depth = tree_depth
+
+        if pool_dict is None and seeds is None:
+            self.A = torch.empty(batch_size).uniform_(*A_range)
+            self.B = torch.empty(batch_size).uniform_(*B_range)
+            self.C = torch.empty(batch_size).uniform_(*C_range)
+            self.D = torch.empty(batch_size).uniform_(*D_range)
+            self.E = torch.empty(batch_size).uniform_(*E_range)
+            self.F = torch.empty(batch_size).uniform_(*F_range)
+            self.G = torch.empty(batch_size).uniform_(*G_range)
+
+        elif seeds is not None:
+            generator = torch.Generator()
+            self.A = torch.zeros(batch_size)
+            self.B = torch.zeros(batch_size)
+            self.C = torch.zeros(batch_size)
+            self.D = torch.zeros(batch_size)
+            self.E = torch.zeros(batch_size)
+            self.F = torch.zeros(batch_size)
+            self.G = torch.zeros(batch_size)
+            assert len(seeds) == batch_size
+            for i, seed in enumerate(seeds):
+                generator.manual_seed(seed)
+                self.A[i] = torch.empty(1).uniform_(*A_range, generator=generator)
+                self.B[i] = torch.empty(1).uniform_(*B_range, generator=generator)
+                self.C[i] = torch.empty(1).uniform_(*C_range, generator=generator)
+                self.D[i] = torch.empty(1).uniform_(*D_range, generator=generator)
+                self.E[i] = torch.empty(1).uniform_(*E_range, generator=generator)
+                self.F[i] = torch.empty(1).uniform_(*F_range, generator=generator)
+                self.G[i] = torch.empty(1).uniform_(*G_range, generator=generator)
+
+        elif pool_dict is not None:
+            assert all(k in pool_dict for k in ["A", "B", "C", "D", "E", "F", "G"])
+            indices = torch.randperm(len(pool_dict["A"]))[:batch_size]
+            self.A = pool_dict["A"][indices]
+            self.B = pool_dict["B"][indices]
+            self.C = pool_dict["C"][indices]
+            self.D = pool_dict["D"][indices]
+            self.E = pool_dict["E"][indices]
+            self.F = pool_dict["F"][indices]
+            self.G = pool_dict["G"][indices]
+
+        else:
+            raise ValueError("Must specify either pool_dict or seeds (or neither).")
+        
+        # 生成 binary decision tree 参数（只用于 eval）
+        self.dt_tensor = torch.randint(
+            low=0, high=n_dims, size=(batch_size, 2 ** (tree_depth + 1) - 1)
+        )
+        self.target_tensor = torch.randn(batch_size, 2 ** (tree_depth + 1) - 1)
+        self.dt_thresholds = torch.empty(batch_size, 2 ** (tree_depth + 1) - 1).uniform_(-1.5, 1.5)
+
+    def evaluate(self, xs_b, mode="period"):
+        xs_proj = xs_b.mean(dim=2)  # shape: (b, p)
+        if mode == "sine":
+            return self.A[:, None].to(xs_b.device) * torch.sin(
+                self.B[:, None].to(xs_b.device) * xs_proj + self.C[:, None].to(xs_b.device)
+            ) + self.D[:, None].to(xs_b.device)
+        elif mode == "exp":
+            return self.E[:, None].to(xs_b.device) * torch.exp(
+                self.F[:, None].to(xs_b.device) * xs_proj
+            ) + self.G[:, None].to(xs_b.device)
+        elif mode == "period":
+            g = generate_periodic_function(**self.periodic_config)
+            x_input = self.B[:, None] * xs_proj + self.C[:, None]
+            # return self.A[:, None] * g(x_input) + self.D[:, None]
+            return g(x_input)
+        elif mode == "decision_tree":
+            xs_proj = xs_b.mean(dim=2)          # (B, T)
+            B, T = xs_proj.shape
+            ys_b = torch.zeros(B, T, device=xs_b.device)
+
+            dt_tensor = self.dt_tensor.to(xs_b.device)
+            dt_thresholds = self.dt_thresholds.to(xs_b.device)
+            target_tensor = self.target_tensor.to(xs_b.device)
+
+            for i in range(B):
+                dt = dt_tensor[i]
+                thresholds = dt_thresholds[i]
+                target = target_tensor[i]
+                cur_nodes = torch.zeros(T, dtype=torch.long, device=xs_b.device)
+
+                for d in range(self.tree_depth):
+                    feature_id = dt[cur_nodes]              # 每个样本的节点用哪个维度
+                    thres = thresholds[cur_nodes]           # 当前节点的阈值
+
+                    x_values = xs_b[i, torch.arange(T), feature_id]  # shape: (T,)
+                    decisions = (x_values > thres).long()            # 非0阈值决策
+                    cur_nodes = 2 * cur_nodes + 1 + decisions
+
+                ys_b[i] = target[cur_nodes]
+
+            return ys_b
+        elif mode == "piecewise_sine":
+            x_proj = xs_b.mean(dim=2)
+            return piecewise_high_freq_sine_gauss(x_proj)
+        elif mode == "combo_nonlinear":
+            x_proj = xs_b.mean(dim=2)  # shape: (B, T)
+            
+            # 偏移 & 拉伸：例如 offset=2.0, scale=1.5 将输入偏移出中心区
+            offset = 2.0
+            scale = 1.5
+            x_shifted = scale * (x_proj + offset)
+            
+            return torch.sin(2 * x_shifted ** 2)
+
+        else:
+            raise ValueError(f"Unknown mode {mode}")
+
+    @staticmethod
+    def generate_pool_dict(n_dims, num_tasks, **kwargs):
+        return {
+            "A": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "B": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "C": torch.empty(num_tasks).uniform_(0.0, math.pi),
+            "D": torch.empty(num_tasks).uniform_(-1.0, 1.0),
+            "E": torch.empty(num_tasks).uniform_(0.5, 2.0),
+            "F": torch.empty(num_tasks).uniform_(0.1, 0.9),
+            "G": torch.empty(num_tasks).uniform_(-1.0, 1.0),
         }
 
     @staticmethod

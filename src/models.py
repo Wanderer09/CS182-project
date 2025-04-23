@@ -7,6 +7,8 @@ from sklearn.linear_model import LogisticRegression, Lasso
 import warnings
 from sklearn import tree
 import xgboost as xgb
+import numpy as np
+from scipy.optimize import curve_fit
 
 from base_models import NeuralNetwork, ParallelNetworks
 
@@ -90,6 +92,14 @@ def get_relevant_baselines(task_name):
             (NNModel, {"n_neighbors": 3}),
             (AveragingModel, {}),
             (OraclePolynomialEstimator, {"degree": 7}),
+        ],
+        "sine2exp": [
+            (LeastSquaresModel, {}),
+            (NNModel, {"n_neighbors": 3}),
+            (AveragingModel, {}),
+            # (ExpFitModel, {}),
+            # (SineFitModel, {}),
+            # (SquareWaveFitModel, {}),
         ],
     }
 
@@ -605,3 +615,148 @@ class OraclePolynomialEstimator:
             preds.append(torch.stack(batch_preds))  # (B,)
 
         return torch.tanh(torch.stack(preds, dim=1))  # (B, T)
+
+class ExpFitModel:
+    """
+    使用非线性最小二乘法拟合 y = a * exp(bx) + c 的 baseline。
+    """
+
+    def __init__(self):
+        self.name = "exp_fit"
+
+    def exp_func(self, x, a, b, c):
+        return a * np.exp(b * x) + c
+
+    def __call__(self, xs, ys, inds=None):
+        """
+        对 batch 中每个样本在第 i 个点之前拟合 exp 曲线，并预测第 i 个点。
+        - xs: (B, T, D) 输入张量
+        - ys: (B, T) 输出张量
+        - inds: 需要预测的位置列表
+        """
+        xs, ys = xs.cpu().numpy(), ys.cpu().numpy()
+
+        B, T, D = xs.shape
+
+        if D != 1:
+            raise ValueError("ExpFitModel 目前只支持 1 维输入特征")
+
+        if inds is None:
+            inds = range(T)
+
+        preds = []
+
+        for i in inds:
+            pred = np.zeros((B,))
+
+            if i > 0:
+                for j in range(B):
+                    x_j = xs[j, :i, 0]
+                    y_j = ys[j, :i]
+
+                    try:
+                        popt, _ = curve_fit(self.exp_func, x_j, y_j, maxfev=10000)
+                        x_test = xs[j, i, 0]
+                        y_pred = self.exp_func(x_test, *popt)
+                        pred[j] = y_pred
+                    except Exception as e:
+                        pred[j] = 0.0  # 拟合失败时返回 0
+
+            preds.append(torch.from_numpy(pred).float())
+
+        return torch.stack(preds, dim=1)
+    
+class SineFitModel:
+    """
+    使用非线性最小二乘法拟合 y = a * sin(bx + c) + d 的 baseline。
+    """
+
+    def __init__(self):
+        self.name = "sine_fit"
+
+    def sine_func(self, x, a, b, c, d):
+        return a * np.sin(b * x + c) + d
+
+    def __call__(self, xs, ys, inds=None):
+        xs, ys = xs.cpu().numpy(), ys.cpu().numpy()
+        B, T, D = xs.shape
+
+        if D != 1:
+            raise ValueError("SineFitModel 目前只支持 1 维输入特征")
+
+        if inds is None:
+            inds = range(T)
+
+        preds = []
+
+        for i in inds:
+            pred = np.zeros((B,))
+
+            if i > 0:
+                for j in range(B):
+                    x_j = xs[j, :i, 0]
+                    y_j = ys[j, :i]
+
+                    try:
+                        # 提供初始猜测值：a=1, b=1, c=0, d=0
+                        popt, _ = curve_fit(
+                            self.sine_func,
+                            x_j,
+                            y_j,
+                            p0=[1.0, 1.0, 0.0, 0.0],
+                            maxfev=10000,
+                        )
+                        x_test = xs[j, i, 0]
+                        y_pred = self.sine_func(x_test, *popt)
+                        pred[j] = y_pred
+                    except Exception:
+                        pred[j] = 0.0  # 拟合失败时返回 0
+
+            preds.append(torch.from_numpy(pred).float())
+
+        return torch.stack(preds, dim=1)
+
+class SquareWaveFitModel:
+    """
+    基于非线性拟合的 square wave baseline。
+    拟合函数：y = A * square(2πx / T + φ) + D
+    """
+
+    def __init__(self):
+        self.name = "square_wave_fit"
+
+    def square_wave(self, x, T, phi, A, D):
+        # x 是 numpy 数组
+        phase = ((x / T + phi / (2 * np.pi)) % 1.0)  # 转换为相位 [0, 1)
+        return A * (phase < 0.5).astype(float) + D
+
+    def __call__(self, xs, ys, inds=None):
+        xs, ys = xs.cpu().numpy(), ys.cpu().numpy()
+        B, T, D = xs.shape
+        assert D == 1, "SquareWaveFitModel 目前只支持 1D 输入"
+
+        if inds is None:
+            inds = range(T)
+
+        preds = []
+
+        for i in tqdm(inds):
+            pred = np.zeros((B,))
+            if i > 0:
+                for j in range(B):
+                    x_j = xs[j, :i, 0]
+                    y_j = ys[j, :i]
+
+                    try:
+                        # 初始值：T, φ, A, D
+                        p0 = [2 * np.pi, 0.0, 1.0, 0.0]
+                        popt, _ = curve_fit(self.square_wave, x_j, y_j, p0=p0, maxfev=10000)
+                        x_test = xs[j, i, 0]
+                        y_pred = self.square_wave(x_test, *popt)
+                        pred[j] = y_pred
+                    except Exception:
+                        pred[j] = 0.0
+
+            preds.append(torch.from_numpy(pred).float())
+
+        return torch.stack(preds, dim=1)
