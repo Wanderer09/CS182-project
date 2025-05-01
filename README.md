@@ -1,4 +1,5 @@
-This repository contains the code and models for our CS182 project report:
+This repository contains the code and models for our CS182 project report.
+This repository is based on the repo: https://github.com/dtsip/in-context-learning.
 
 ## Getting started
 You can start by cloning our repository and following the steps below.
