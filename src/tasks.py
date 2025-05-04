@@ -631,7 +631,7 @@ class Sine2Exp(Task):
         self.target_tensor = torch.randn(batch_size, 2 ** (tree_depth + 1) - 1)
         self.dt_thresholds = torch.empty(batch_size, 2 ** (tree_depth + 1) - 1).uniform_(-1.5, 1.5)
 
-    def evaluate(self, xs_b, mode="period"):        # PLEASE CHANGE THIS MODE WHEN DOING TRAINING AND EVAL #
+    def evaluate(self, xs_b, mode="piecewise_sine"):        # PLEASE CHANGE THIS MODE WHEN DOING TRAINING AND EVAL #
         xs_proj = xs_b.mean(dim=2)  # shape: (b, p)
         if mode == "sine":
             return self.A[:, None].to(xs_b.device) * torch.sin(
